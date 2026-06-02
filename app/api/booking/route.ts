@@ -15,9 +15,8 @@ async function getCalendarClient() {
   return google.calendar({ version: 'v3', auth });
 }
 
-const sendWhatsAppNotification = (name: string, service: string, time: string, phone: string) => {
-  // Placeholder for WhatsApp Business API
-  console.log(`[WHATSAPP API PLACEHOLDER]: Sending notification to ${phone} for ${name}'s ${service} appointment at ${time}`);
+const sendWhatsAppNotification = (_name: string, _service: string, _time: string, _phone: string) => {
+  // WhatsApp Business API integration to be added
 };
 
 export async function GET(request: Request) {
@@ -31,9 +30,9 @@ export async function GET(request: Request) {
 
     const calendar = await getCalendarClient();
     
-    // Define window for availability (09:00 to 18:00)
-    const timeMin = new Date(`${date}T09:00:00`).toISOString();
-    const timeMax = new Date(`${date}T18:00:00`).toISOString();
+    // Define window for availability (09:00 to 18:00) in Africa/Gaborone (UTC+2)
+    const timeMin = new Date(`${date}T09:00:00+02:00`).toISOString();
+    const timeMax = new Date(`${date}T18:00:00+02:00`).toISOString();
 
     const calendarId = process.env.GOOGLE_CALENDAR_ID;
     if (!calendarId) {
@@ -94,15 +93,14 @@ export async function GET(request: Request) {
     return NextResponse.json(availableSlots);
   } catch (error: unknown) {
     console.error('Booking GET Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch availability' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, phone, service, startTime } = body;
+    const { name, phone, service, startTime, hasLineDesigns } = body;
 
     if (!name || !phone || !service || !startTime) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -119,22 +117,7 @@ export async function POST(request: Request) {
     const start = new Date(startTime);
     const end = new Date(start.getTime() + (duration + 5) * 60000);
 
-    // 1. Log to Supabase
-    const { error: dbError } = await supabaseAdmin
-      .from('bookings')
-      .insert([
-        { 
-          customer_name: name, 
-          customer_phone: phone, 
-          service_name: service, 
-          booking_time: start.toISOString(),
-          status: 'confirmed'
-        }
-      ]);
-
-    if (dbError) {
-      console.warn('Supabase Logging Error (Continuing to Calendar):', dbError);
-    }
+    const displayName = `${service}${hasLineDesigns ? ' + Line Designs' : ''}`;
 
     // 2. Create Google Calendar Event
     const calendar = await getCalendarClient();
@@ -147,8 +130,8 @@ export async function POST(request: Request) {
     const event = await calendar.events.insert({
       calendarId: calendarId,
       requestBody: {
-        summary: `${service} - ${name}`,
-        description: `WhatsApp: ${phone}\nLogged in Supabase: ${dbError ? 'No' : 'Yes'}`,
+        summary: `${displayName} - ${name}`,
+        description: `WhatsApp: ${phone}\nLine Designs: ${hasLineDesigns ? 'Yes (P20)' : 'No'}`,
         start: {
           dateTime: start.toISOString(),
           timeZone: TIMEZONE,
@@ -160,17 +143,37 @@ export async function POST(request: Request) {
       },
     });
 
+    // 1. Log to Supabase (now including google_event_id)
+    const { data: insertedRows, error: supabaseError } = await supabaseAdmin
+      .from('bookings')
+      .insert([
+        { 
+          customer_name: name, 
+          customer_phone: phone, 
+          service_name: displayName, 
+          booking_time: start.toISOString(),
+          status: 'confirmed',
+          google_event_id: event.data.id || null
+        }
+      ])
+      .select('id')
+      .single();
+
+    if (supabaseError) {
+      console.error('Supabase Logging Error:', supabaseError);
+    }
+
     // 3. WhatsApp Notification Placeholder
-    sendWhatsAppNotification(name, service, start.toLocaleTimeString(), phone);
+    sendWhatsAppNotification(name, displayName, start.toLocaleTimeString(), phone);
 
     return NextResponse.json({ 
       success: true, 
       eventId: event.data.id,
-      dbLogged: !dbError
+      dbLogged: !supabaseError,
+      bookingId: insertedRows?.id || null
     });
   } catch (error: unknown) {
     console.error('Booking POST Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
   }
 }

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import LightRays from "./LightRays";
 import SplitText from "./SplitText";
+import BackgroundSlideshow from "./BackgroundSlideshow";
 
 import DetailsForm from "./DetailsForm";
 import CalendarStep from "./CalendarStep";
@@ -21,35 +22,31 @@ interface Service {
 const SERVICE_META: Record<string, { category: "Regular Fade Cuts" | "Tinted Cuts"; image: string; description: string }> = {
   "Regular Fade": {
     category: "Regular Fade Cuts",
-    image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?q=80&w=600&auto=format&fit=crop",
+    image: "",
     description: "Classic clean blend, precision tapered around the ears and neck."
   },
   "Regular Fade & Fibre": {
     category: "Regular Fade Cuts",
-    image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?q=80&w=600&auto=format&fit=crop",
+    image: "/images/cut_and_fibre.jpeg",
     description: "Precision fade enhanced with natural hair fibers for a fuller hairline."
   },
   "Regular Fade & Tint": {
     category: "Tinted Cuts",
-    image: "https://images.unsplash.com/photo-1599351431202-1e0f0137899a?q=80&w=600&auto=format&fit=crop",
+    image: "/images/cut_and_tint.jpeg",
     description: "Sharp fade combined with high-contrast hair color tint enhancement."
   },
   "Cut & Blonde": {
     category: "Tinted Cuts",
-    image: "https://images.unsplash.com/photo-1605497746444-ac9da5848aff?q=80&w=600&auto=format&fit=crop",
+    image: "/images/cut_and_blonde.jpeg",
     description: "Premium hair scissor cut and dynamic full blonde coloring."
-  },
-  "Fade & Blonde": {
-    category: "Tinted Cuts",
-    image: "https://images.unsplash.com/photo-1517832606299-7ae9b720a186?q=80&w=600&auto=format&fit=crop",
-    description: "Sleek fade haircut finished with a premium blonde top bleach."
   }
 };
 
 export default function BookingFlow() {
   const [services, setServices] = useState<Service[]>([]);
-  const [step, setStep] = useState<"landing" | "service" | "details" | "calendar" | "summary" | "success">("landing");
+  const [step, setStep] = useState<"landing" | "service" | "designs" | "details" | "calendar" | "summary" | "success">("landing");
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [wantsLineDesigns, setWantsLineDesigns] = useState<boolean>(false);
   const [customerData, setCustomerData] = useState<{ fullName: string; whatsapp: string }>({
     fullName: "",
     whatsapp: ""
@@ -76,7 +73,11 @@ export default function BookingFlow() {
   };
   
   const handleServiceNext = () => {
-    if (selectedServiceId) setStep("details");
+    if (selectedServiceId) setStep("designs");
+  };
+
+  const handleDesignsNext = () => {
+    setStep("details");
   };
 
   const handleDetailsNext = (data: { fullName: string; whatsapp: string }) => {
@@ -102,6 +103,7 @@ export default function BookingFlow() {
           phone: customerData.whatsapp,
           service: selectedService.name,
           startTime: bookingDetails.iso,
+          hasLineDesigns: wantsLineDesigns,
         }),
       });
 
@@ -120,6 +122,7 @@ export default function BookingFlow() {
   };
 
   const handleBackToService = () => setStep("service");
+  const handleBackToDesigns = () => setStep("designs");
   const handleBackToDetails = () => setStep("details");
   const handleBackToLanding = () => setStep("landing");
 
@@ -168,12 +171,18 @@ export default function BookingFlow() {
           }
         `}
       >
-        <div className="h-48 w-full relative overflow-hidden bg-gray-950">
-          <img 
-            src={meta.image} 
-            alt={service.name} 
-            className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-          />
+        <div className="h-48 w-full relative overflow-hidden bg-gray-950 flex items-center justify-center">
+          {meta.image ? (
+            <img 
+              src={meta.image} 
+              alt={service.name} 
+              className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-barber-blue/20 to-sharp-red/10 flex items-center justify-center">
+              <span className="text-4xl filter drop-shadow-[0_0_10px_rgba(0,71,171,0.5)]">✂️</span>
+            </div>
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-dark-gray via-transparent to-transparent" />
         </div>
         <div className="p-6 flex-1 flex flex-col justify-between">
@@ -206,6 +215,7 @@ export default function BookingFlow() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      <BackgroundSlideshow />
       <LightRays
         raysOrigin="top-center"
         raysColor="#2563EB"
@@ -359,10 +369,101 @@ export default function BookingFlow() {
           </motion.div>
         )}
 
+        {step === "designs" && (
+          <motion.div
+            key="designs"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ duration: 0.6 }}
+            className="w-full max-w-4xl"
+          >
+            <div className="mb-12 text-center">
+              <h2 className="text-4xl font-bold text-white mb-2">Elevate Your Cut</h2>
+              <p className="text-gray-400">Add custom precision line designs crafted by our master barbers</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+              <div className="grid grid-cols-2 gap-4 bg-dark-gray/40 border border-barber-blue/10 p-4 rounded-2xl">
+                <div className="h-64 rounded-xl overflow-hidden relative border border-gray-800">
+                  <img src="/images/line_designs.jpeg" alt="Line Design Sample 1" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <span className="absolute bottom-2 left-2 text-[10px] text-gray-300 uppercase tracking-widest font-bold">Sample Style A</span>
+                </div>
+                <div className="h-64 rounded-xl overflow-hidden relative border border-gray-800">
+                  <img src="/images/line_designs1.jpeg" alt="Line Design Sample 2" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <span className="absolute bottom-2 left-2 text-[10px] text-gray-300 uppercase tracking-widest font-bold">Sample Style B</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-center space-y-6">
+                <div 
+                  onClick={() => setWantsLineDesigns(false)}
+                  className={`
+                    p-6 rounded-xl cursor-pointer border-2 transition-all duration-300 flex flex-col justify-between
+                    ${!wantsLineDesigns 
+                      ? 'bg-barber-blue/10 border-barber-blue shadow-[0_0_15px_rgba(0,71,171,0.2)]' 
+                      : 'bg-dark-gray border-gray-800 hover:border-gray-700'
+                    }
+                  `}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-xl font-bold text-white">No, just the basic cut</h4>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!wantsLineDesigns ? 'bg-barber-blue border-barber-blue' : 'border-gray-600'}`}>
+                      {!wantsLineDesigns && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                    </div>
+                  </div>
+                  <p className="text-gray-400 text-sm">Keep it classic with your selected haircut alone.</p>
+                </div>
+
+                <div 
+                  onClick={() => setWantsLineDesigns(true)}
+                  className={`
+                    p-6 rounded-xl cursor-pointer border-2 transition-all duration-300 flex flex-col justify-between
+                    ${wantsLineDesigns 
+                      ? 'bg-sharp-red/10 border-sharp-red shadow-[0_0_15px_rgba(220,38,38,0.2)]' 
+                      : 'bg-dark-gray border-gray-800 hover:border-gray-700'
+                    }
+                  `}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xl font-bold text-white">Yes, add line designs</h4>
+                      <span className="text-xs bg-sharp-red text-white font-mono font-bold px-2 py-0.5 rounded">FROM P20</span>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${wantsLineDesigns ? 'bg-sharp-red border-sharp-red' : 'border-gray-600'}`}>
+                      {wantsLineDesigns && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                    </div>
+                  </div>
+                  <p className="text-gray-400 text-sm">Upgrade with sharp, customized precision razor line designs (+P20).</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={handleBackToService}
+                className="px-8 py-4 border-2 border-gray-700 text-gray-400 font-bold uppercase tracking-widest hover:border-white hover:text-white transition-all duration-300"
+              >
+                Back
+              </button>
+              <motion.button
+                onClick={handleDesignsNext}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-12 py-4 text-xl font-bold uppercase tracking-widest bg-barber-blue text-white hover:bg-barber-blue/80 cursor-pointer shadow-[0_0_15px_rgba(0,71,171,0.5)] transition-all duration-300"
+              >
+                Next
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+
         {step === "details" && (
           <DetailsForm 
             onNext={handleDetailsNext} 
-            onBack={handleBackToService} 
+            onBack={handleBackToDesigns} 
             initialData={customerData}
           />
         )}
@@ -387,7 +488,20 @@ export default function BookingFlow() {
             <div className="space-y-6 mb-10 text-left border-y border-gray-800 py-6">
               <div>
                 <p className="text-gray-500 uppercase text-xs tracking-widest mb-1">Service</p>
-                <p className="text-white text-xl font-bold">{selectedService.name}</p>
+                <div className="flex justify-between items-center">
+                  <p className="text-white text-xl font-bold">{selectedService.name}</p>
+                  <p className="text-white font-mono">P{selectedService.price}</p>
+                </div>
+                {wantsLineDesigns && (
+                  <div className="flex justify-between items-center mt-2 text-sm text-gray-400">
+                    <p>⚡ Precision Line Designs</p>
+                    <p className="font-mono">+P20</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-between items-center pt-4 border-t border-gray-800">
+                <p className="text-gray-500 uppercase text-xs tracking-widest">Total Price</p>
+                <p className="text-2xl font-black text-white font-mono">P{selectedService.price + (wantsLineDesigns ? 20 : 0)}</p>
               </div>
               <div className="flex justify-between">
                 <div>
@@ -444,7 +558,10 @@ export default function BookingFlow() {
               </svg>
             </div>
             <h2 className="text-5xl font-bold text-white mb-4 tracking-tighter">YOU&apos;RE ALL SET!</h2>
-            <p className="text-gray-400 text-xl mb-12">Your appointment has been confirmed and added to our calendar.</p>
+            <p className="text-gray-400 text-xl mb-4">Your appointment has been confirmed and added to our calendar.</p>
+            <p className="text-gray-500 text-sm mb-12 max-w-md mx-auto italic">
+              A confirmation message will be sent to your WhatsApp, Thank you.
+            </p>
             <p className="text-sharp-red font-bold uppercase tracking-widest mb-12 animate-pulse">See you at Urban Fades BW!</p>
             
             <button 
