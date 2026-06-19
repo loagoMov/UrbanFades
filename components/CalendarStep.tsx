@@ -36,6 +36,15 @@ export default function CalendarStep({ onNext, onBack, initialData }: CalendarSt
 
   const today = startOfToday();
 
+  const formatTime = (d: Date) => {
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Africa/Gaborone' // Ensure consistent timezone
+    }).replace(/^0/, ''); // Clean leading zeros (e.g. 09:00 AM -> 9:00 AM)
+  };
+
   useEffect(() => {
     const fetchAvailability = async (date: Date) => {
       setLoading(true);
