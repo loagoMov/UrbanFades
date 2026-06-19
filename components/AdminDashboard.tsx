@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { format, isAfter, isBefore, parseISO } from "date-fns";
+import { useState, useEffect } from "react";
+import { format, isAfter, isBefore, parseISO, isToday, isTomorrow } from "date-fns";
 import { auth as clientAuth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
 
 interface Booking {
   id: string;
@@ -17,15 +18,33 @@ interface Booking {
 
 interface AdminDashboardProps {
   initialBookings: Booking[];
+  onRefresh: () => Promise<any>;
+  isRefreshing: boolean;
 }
 
-export default function AdminDashboard({ initialBookings }: AdminDashboardProps) {
+export default function AdminDashboard({ initialBookings, onRefresh, isRefreshing }: AdminDashboardProps) {
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setBookings(initialBookings);
+    setLastUpdated(new Date());
+  }, [initialBookings]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"upcoming" | "past" | "all">("upcoming");
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
 
   const now = new Date();
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await signOut(clientAuth);
+      // The onAuthStateChanged listener in AuthRedirect will handle redirecting to /admin/login
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+  };
 
   // Handle admin cancellation
   const handleCancelBooking = async (id: string) => {
@@ -50,6 +69,7 @@ export default function AdminDashboard({ initialBookings }: AdminDashboardProps)
         setBookings((prev) =>
           prev.map((b) => (b.id === id ? { ...b, status: "cancelled" } : b))
         );
+        onRefresh();
       } else {
         const err = await res.json();
         alert(`Failed to cancel: ${err.error}`);
@@ -97,8 +117,11 @@ export default function AdminDashboard({ initialBookings }: AdminDashboardProps)
   const filteredBookings = bookings.filter((booking) => {
     const bookingDate = parseISO(booking.booking_time);
 
-    if (filterType === "upcoming" && (isBefore(bookingDate, now) || booking.status === "cancelled")) {
-      return false;
+    if (filterType === "upcoming") {
+      const isUpcomingTodayOrTomorrow = isAfter(bookingDate, now) && (isToday(bookingDate) || isTomorrow(bookingDate));
+      if (!isUpcomingTodayOrTomorrow || booking.status === "cancelled") {
+        return false;
+      }
     }
     if (filterType === "past" && isAfter(bookingDate, now)) {
       return false;
@@ -112,12 +135,23 @@ export default function AdminDashboard({ initialBookings }: AdminDashboardProps)
   });
 
   return (
-    <div className="max-w-6xl mx-auto z-10 relative">
+    <div className="max-w-6xl mx-auto z-10 relative pt-8 md:pt-4">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 pb-8 border-b border-white/5">
         <div>
           <div className="flex items-center gap-3">
-            <span className="text-2xl">💈</span>
+            <svg
+              className="w-6 h-6 text-barber-blue"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <circle cx="6" cy="6" r="3" strokeWidth={2} />
+              <circle cx="6" cy="18" r="3" strokeWidth={2} />
+              <line x1="9" y1="8.5" x2="19" y2="17.5" strokeWidth={2} strokeLinecap="round" />
+              <line x1="9" y1="15.5" x2="19" y2="6.5" strokeWidth={2} strokeLinecap="round" />
+            </svg>
             <span className="text-xs uppercase tracking-widest text-barber-blue font-bold font-mono bg-barber-blue/10 px-2.5 py-1 rounded">
               Management Portal
             </span>
@@ -125,17 +159,90 @@ export default function AdminDashboard({ initialBookings }: AdminDashboardProps)
           <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter mt-3">
             URBAN FADES <span className="text-white/40">BW</span>
           </h1>
-          <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest mt-2 animate-pulse">
-            Welcome Back Warona
-          </p>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest animate-pulse">
+              Welcome Back Warona
+            </p>
+            <span className="text-white/20 text-xs">•</span>
+            <p className="text-[11px] text-gray-400 font-mono">
+              {lastUpdated ? `Last updated: ${format(lastUpdated, "h:mm:ss a")}` : "Loading..."}
+            </p>
+            {isRefreshing && (
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+            )}
+          </div>
         </div>
-        <div className="mt-6 md:mt-0">
+        <div className="mt-6 md:mt-0 flex flex-wrap gap-3">
+          <button
+            onClick={() => onRefresh()}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-barber-blue/10 border border-barber-blue/20 text-xs font-semibold uppercase tracking-wider text-barber-blue hover:text-white hover:bg-barber-blue hover:border-barber-blue transition-all duration-300 rounded disabled:opacity-50"
+          >
+            <svg
+              className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M21 20v-5h-.581m0 0a8.003 8.003 0 01-15.357-2"
+              />
+            </svg>
+            <span>{isRefreshing ? "Syncing..." : "Sync Now"}</span>
+          </button>
+          <a
+            href="/admin/analytics"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600/10 border border-emerald-500/20 text-xs font-semibold uppercase tracking-wider text-emerald-400 hover:text-white hover:bg-emerald-600 hover:border-emerald-600 transition-all duration-300 rounded"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+            <span>View Analytics</span>
+          </a>
           <a
             href="/"
             className="inline-flex items-center gap-2 px-5 py-2.5 border border-white/10 text-xs font-semibold uppercase tracking-wider text-gray-400 hover:text-white hover:border-white transition-all duration-300 rounded"
           >
-            <span>←</span> View Front Booking
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
+            </svg>
+            <span>View Front Booking</span>
           </a>
+          <button
+            onClick={handleLogout}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600/10 border border-red-500/20 text-xs font-semibold uppercase tracking-wider text-red-400 hover:text-white hover:bg-red-600 hover:border-red-600 transition-all duration-300 rounded"
+          >
+            Sign Out
+          </button>
         </div>
       </div>
 
@@ -172,7 +279,20 @@ export default function AdminDashboard({ initialBookings }: AdminDashboardProps)
       {/* Grid of Minimal Cards (Modern Booking Feed) */}
       {filteredBookings.length === 0 ? (
         <div className="text-center py-20 border border-dashed border-white/5 rounded-xl bg-dark-gray/20">
-          <span className="text-3xl block mb-3 text-gray-600">📅</span>
+          <svg
+            className="w-8 h-8 text-gray-600 mx-auto mb-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
           <p className="text-sm text-gray-500 font-medium">No bookings found matching filters.</p>
         </div>
       ) : (

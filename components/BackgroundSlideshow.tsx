@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const IMAGES = [
+  "/images/regular_Fade.jpeg",
   "/images/cut_and_blonde.jpeg",
   "/images/cut_and_fibre.jpeg",
   "/images/cut_and_tint.jpeg",

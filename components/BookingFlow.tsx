@@ -22,7 +22,7 @@ interface Service {
 const SERVICE_META: Record<string, { category: "Regular Fade Cuts" | "Tinted Cuts"; image: string; description: string }> = {
   "Regular Fade": {
     category: "Regular Fade Cuts",
-    image: "",
+    image: "/images/regular_Fade.jpeg",
     description: "Classic clean blend, precision tapered around the ears and neck."
   },
   "Regular Fade & Fibre": {
@@ -57,16 +57,30 @@ export default function BookingFlow() {
 
   const selectedService = services.find(s => s.id === selectedServiceId);
 
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+
   const handleStartBooking = async () => {
     setStep("service");
     setIsLoadingServices(true);
     try {
-      const { data, error } = await supabase.from('services').select('*').order('created_at', { ascending: true });
+      const start = (currentPage - 1) * PAGE_SIZE;
+      const end = start + PAGE_SIZE - 1;
+      const { data, error, count } = await supabase
+        .from('services')
+        .select('id, name, price, duration_minutes, created_at', { count: 'exact' })
+        .order('created_at', { ascending: true })
+        .range(start, end);
+      if (error) throw error;
       if (data) {
-        setServices(data);
+        setServices(prev => [...prev, ...data]);
+        if (count) {
+          setHasMore(end + 1 < count);
+        }
       }
     } catch (err) {
-      console.error("Error loading services:", err);
+      console.error('Error loading services:', err);
     } finally {
       setIsLoadingServices(false);
     }
@@ -176,6 +190,7 @@ export default function BookingFlow() {
             <img 
               src={meta.image} 
               alt={service.name} 
+              loading="lazy"
               className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
             />
           ) : (
@@ -215,6 +230,9 @@ export default function BookingFlow() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute top-6 left-6 md:top-8 md:left-8 z-50 w-20 md:w-28">
+        <img src="/logo.png" alt="Urban Fades Logo" className="w-full h-auto object-contain drop-shadow-lg" />
+      </div>
       <BackgroundSlideshow />
       <LightRays
         raysOrigin="top-center"
@@ -289,7 +307,7 @@ export default function BookingFlow() {
             </div>
 
             <div className="space-y-12 mb-12">
-              {isLoadingServices ? (
+              {isLoadingServices && services.length === 0 ? (
                 <>
                   <div>
                     <h3 className="text-2xl font-black text-white mb-6 uppercase tracking-wider border-b border-barber-blue/30 pb-2 flex items-center gap-2">
@@ -298,17 +316,6 @@ export default function BookingFlow() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {Array.from({ length: 2 }).map((_, i) => (
-                        <div key={i}>{renderSkeletonCard()}</div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-white mb-6 uppercase tracking-wider border-b border-barber-blue/30 pb-2 flex items-center gap-2">
-                      <span className="w-1.5 h-6 bg-sharp-red inline-block"></span>
-                      Tinted Cuts
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {Array.from({ length: 3 }).map((_, i) => (
                         <div key={i}>{renderSkeletonCard()}</div>
                       ))}
                     </div>
@@ -343,7 +350,21 @@ export default function BookingFlow() {
               )}
             </div>
 
-            <div className="flex justify-center gap-4">
+            {hasMore && (
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={() => {
+                    setCurrentPage(prev => prev + 1);
+                    handleStartBooking();
+                  }}
+                  className="px-6 py-2 bg-barber-blue text-white rounded hover:bg-barber-blue/80 transition"
+                >
+                  Load More Services
+                </button>
+              </div>
+            )}
+
+            <div className="flex justify-center gap-4 mt-6">
               <button
                 onClick={handleBackToLanding}
                 className="px-8 py-4 border-2 border-gray-700 text-gray-400 font-bold uppercase tracking-widest hover:border-white hover:text-white transition-all duration-300"

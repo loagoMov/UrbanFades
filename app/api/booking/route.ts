@@ -1,6 +1,13 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { createRateLimiter, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
+
+// Initialize rate limiters:
+// - GET: 30 requests per minute to prevent scraping availability
+// - POST: 5 booking requests per 10 minutes to prevent booking spam
+const availabilityRateLimiter = createRateLimiter(30, 60 * 1000);
+const bookingCreationRateLimiter = createRateLimiter(5, 10 * 60 * 1000);
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 const TIMEZONE = 'Africa/Gaborone';
@@ -21,11 +28,17 @@ const sendWhatsAppNotification = (_name: string, _service: string, _time: string
 
 export async function GET(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const limitCheck = availabilityRateLimiter(ip);
+    if (!limitCheck.allowed) {
+      return rateLimitResponse(limitCheck.resetInSeconds);
+    }
+
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date'); // YYYY-MM-DD
 
-    if (!date) {
-      return NextResponse.json({ error: 'Date is required' }, { status: 400 });
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: 'Invalid or missing date parameter (must be YYYY-MM-DD)' }, { status: 400 });
     }
 
     const calendar = await getCalendarClient();
@@ -99,11 +112,43 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const ip = getClientIp(request);
+    const limitCheck = bookingCreationRateLimiter(ip);
+    if (!limitCheck.allowed) {
+      return rateLimitResponse(limitCheck.resetInSeconds);
+    }
+
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
+    }
+
     const { name, phone, service, startTime, hasLineDesigns } = body;
 
-    if (!name || !phone || !service || !startTime) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    // Strict validation
+    if (!name || typeof name !== 'string' || name.trim().length < 2 || name.length > 50) {
+      return NextResponse.json({ error: 'Invalid name (must be between 2 and 50 characters)' }, { status: 400 });
+    }
+
+    // Phone validation (simple international and regional regex, between 7 and 15 digits)
+    if (!phone || typeof phone !== 'string' || !/^\+?[0-9\s-]{7,15}$/.test(phone.trim())) {
+      return NextResponse.json({ error: 'Invalid phone number format' }, { status: 400 });
+    }
+
+    if (!service || typeof service !== 'string' || service.length > 100) {
+      return NextResponse.json({ error: 'Invalid service selected' }, { status: 400 });
+    }
+
+    if (!startTime || typeof startTime !== 'string' || isNaN(Date.parse(startTime))) {
+      return NextResponse.json({ error: 'Invalid start time format (must be a valid ISO string)' }, { status: 400 });
+    }
+
+    const start = new Date(startTime);
+    // Prevent booking in the past
+    if (start.getTime() < Date.now()) {
+      return NextResponse.json({ error: 'Booking time cannot be in the past' }, { status: 400 });
     }
 
     // Fetch the correct service duration from Supabase
@@ -114,7 +159,6 @@ export async function POST(request: Request) {
       .single();
 
     const duration = serviceData?.duration_minutes || 30;
-    const start = new Date(startTime);
     const end = new Date(start.getTime() + (duration + 5) * 60000);
 
     const displayName = `${service}${hasLineDesigns ? ' + Line Designs' : ''}`;

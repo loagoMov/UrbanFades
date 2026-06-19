@@ -3,6 +3,13 @@ import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { google } from 'googleapis';
 import { auth as adminAuth } from '@/lib/firebaseAdmin';
+import { createRateLimiter, getClientIp, rateLimitResponse } from '@/lib/rateLimit';
+
+// Initialize rate limiters:
+// - POST (Customer cancel): 5 requests per 10 minutes to prevent brute forcing signature tokens
+// - DELETE (Admin cancel): 10 requests per minute
+const customerCancelLimiter = createRateLimiter(5, 10 * 60 * 1000);
+const adminCancelLimiter = createRateLimiter(10, 60 * 1000);
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
@@ -19,13 +26,31 @@ async function getCalendarClient() {
 // 1. POST handler for customer cancellation using signed tokens (no login required)
 export async function POST(request: Request) {
   try {
-    const { id, token } = await request.json();
-    if (!id || !token) {
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    const ip = getClientIp(request);
+    const limitCheck = customerCancelLimiter(ip);
+    if (!limitCheck.allowed) {
+      return rateLimitResponse(limitCheck.resetInSeconds);
+    }
+
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
+    }
+
+    const { id, token } = body;
+    if (!id || typeof id !== 'string' || !token || typeof token !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });
     }
 
     // Verify cryptographic token to prevent tampering
-    const secret = process.env.CANCELLATION_SECRET || 'fallback-secret-key-12345';
+    const secret = process.env.CANCELLATION_SECRET;
+    if (!secret) {
+      console.error('CRITICAL: CANCELLATION_SECRET environment variable is not set!');
+      return NextResponse.json({ error: 'System configuration error' }, { status: 500 });
+    }
+    
     const expectedToken = crypto.createHmac('sha256', secret).update(id).digest('hex');
 
     if (token !== expectedToken) {
@@ -96,6 +121,12 @@ export async function POST(request: Request) {
 // 2. DELETE handler for admin cancellation (requires Firebase Auth token verification)
 export async function DELETE(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const limitCheck = adminCancelLimiter(ip);
+    if (!limitCheck.allowed) {
+      return rateLimitResponse(limitCheck.resetInSeconds);
+    }
+
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -103,7 +134,11 @@ export async function DELETE(request: Request) {
 
     const idToken = authHeader.split(' ')[1];
     try {
-      await adminAuth.verifyIdToken(idToken);
+      const decodedToken = await adminAuth.verifyIdToken(idToken);
+      // Enforce admin custom claim role check
+      if (decodedToken.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     } catch {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -111,8 +146,8 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
-    if (!id) {
-      return NextResponse.json({ error: 'Missing booking ID' }, { status: 400 });
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid booking ID' }, { status: 400 });
     }
 
     const { data: booking, error: fetchError } = await supabaseAdmin
