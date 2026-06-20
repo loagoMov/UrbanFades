@@ -1,5 +1,17 @@
 import type { NextConfig } from 'next';
 
+// Use the same timezone everywhere – fallback to Africa/Gaborone if not set
+const TIME_ZONE = process.env.NEXT_PUBLIC_TIMEZONE || 'Africa/Gaborone';
+
+const formatTime = (d: Date) => {
+  return d.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: TIME_ZONE // Use env‑driven timezone
+  }).replace(/^0/, ''); // Clean leading zeros (e.g. 09:00 AM -> 9:00 AM)
+};
+
 const securityHeaders = [
   // Prevent the site from being embedded in iframes (clickjacking)
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -19,6 +31,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Environment variables for consistent timezone handling
+  env: {
+    TZ: 'Africa/Gaborone',               // Node process timezone
+    NEXT_PUBLIC_TIMEZONE: 'Africa/Gaborone' // Exposed to client side
+  },
   // @ts-ignore: newly added by Next.js in warning
   allowedDevOrigins: ['192.168.5.110'],
 

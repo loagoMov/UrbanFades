@@ -83,11 +83,13 @@ export async function GET(request: Request) {
       });
 
       const formatTime = (d: Date) => {
-        return d.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          hour12: true 
-        }).replace(/^0/, ''); // Clean leading zeros (e.g. 09:00 AM -> 9:00 AM)
+        const tz = process.env.TZ || 'Africa/Gaborone';
+        return d.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: tz,
+        }).replace(/^0/, ''); // Clean leading zeros (e.g. 09:00 AM → 9:00 AM)
       };
 
       const now = new Date();
